@@ -1,3 +1,6 @@
+## Projectile motion simulation with angle from vertical
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1" # Hide the pygame welcome message
 import pygame
 import math
 import sys

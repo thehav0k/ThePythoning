@@ -1,5 +1,6 @@
 ## Plane Collision Simulation with Tower Collapse
-
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1" # Hide the pygame welcome message
 import pygame
 import sys
 import random
@@ -7,10 +8,10 @@ import random
 try:
     plane_height = float(input("Enter initial flight height of plane in meters (e.g., 150): "))
     if not (10 <= plane_height <= 1000):
-        print("Using default height of 150 meters.")
+        print("Using default height of 125 meters.")
         plane_height = 150
 except Exception:
-    plane_height = 150
+    plane_height = 125
 
 # Constants
 WIDTH, HEIGHT = 1000, 600

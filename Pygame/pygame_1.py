@@ -1,5 +1,7 @@
 ## Tic Tac Toe Game in Pygame
 
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1" # Hide the pygame welcome message
 import pygame
 import sys
 

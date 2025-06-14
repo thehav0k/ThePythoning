@@ -1,3 +1,7 @@
+## Free Fall Simulation: Earth vs Moon
+
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1" # Hide the pygame welcome message
 import pygame
 import sys
 import math
