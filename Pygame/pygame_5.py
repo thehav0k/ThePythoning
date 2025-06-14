@@ -1,3 +1,5 @@
+## Simple Harmonic Motion Simulation
+
 import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1" # Hide the pygame welcome message
 import pygame
@@ -8,7 +10,7 @@ import math
 pygame.init()
 WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Pendulum Simulation (Bob on String)")
+pygame.display.set_caption("Simple Harmonic Motion Simulation")
 clock = pygame.time.Clock()
 
 # Colors
