@@ -11,8 +11,9 @@ import time
 from PIL import Image, ImageTk
 import io
 import json
+import glob
 
-AUDIO_FILE = 'audio.mp3'
+current_audio_file: str  # tracks the currently playing audio file path
 playlist_file = 'playlist.json'
 playlist = []  # list of {'title': str, 'query': str}
 current_index = 0
@@ -43,6 +44,7 @@ def format_time(seconds):
 
 def gui_music_player():
     global playlist, entry
+    global current_audio_file
     playlist_file = 'playlist.json' # Load existing playlist if available
     try:
         with open(playlist_file, 'r') as f:
@@ -51,7 +53,7 @@ def gui_music_player():
         playlist = []
 
     def play_song(index):
-        global current_index
+        global current_index, current_audio_file
         if index < 0 or index >= len(playlist):
             return
         current_index = index
@@ -62,8 +64,14 @@ def gui_music_player():
 
         def task():
             try:
+                # generate a unique filename base per song index
+                base = f"audio_{index}"
                 q = f'ytsearch1:{query}' if not query.startswith('http') else query
-                title, thumb_url = download_audio(q, 'audio')
+                title, thumb_url = download_audio(q, base)
+                # set current audio path
+                audio_path = f"{base}.mp3"
+                current_audio_file = audio_path
+
                 # override title with actual YouTube title via oEmbed for direct URLs
                 if query.startswith('http'):
                     try:
@@ -72,10 +80,10 @@ def gui_music_player():
                     except:
                         pass
 
-                if os.path.exists(AUDIO_FILE):
+                if os.path.exists(audio_path):
                     status_var.set(f'▶️ Playing: {title}')
                     pygame.mixer.init()
-                    pygame.mixer.music.load(AUDIO_FILE)
+                    pygame.mixer.music.load(audio_path)
                     pygame.mixer.music.set_volume(0.5)
                     pygame.mixer.music.play()
 
@@ -150,10 +158,13 @@ def gui_music_player():
         status_var.set('▶️ Playing...')
 
     def stop():
+        global current_audio_file
         pygame.mixer.music.stop()
         status_var.set('⏹️ Stopped.')
+        # remove the last downloaded file
         try:
-            os.remove(AUDIO_FILE)
+            if current_audio_file and os.path.exists(current_audio_file):
+                os.remove(current_audio_file)
         except:
             pass
         enable_play_button()
@@ -309,6 +320,23 @@ def gui_music_player():
     for i, btn in enumerate([play_btn, pause_btn, resume_btn, stop_btn, prev_btn, next_btn, loop_btn]):
         btn.grid(row=0, column=i, padx=4)
 
+    # cleanup files on close
+    def on_closing():
+        try:
+            pygame.mixer.music.stop()
+        except:
+            pass
+        # delete downloaded audio and thumbnails
+        patterns = ["audio_*.mp3", "audio_*.webp", "audio_*.jpg", "audio_*.png"]
+        for pat in patterns:
+            for f in glob.glob(pat):
+                try:
+                    os.remove(f)
+                except:
+                    pass
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
 
 if __name__ == '__main__':
