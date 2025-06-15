@@ -1,5 +1,9 @@
 [
     {
+        "title": "One Direction - Night Changes",
+        "query": "https://www.youtube.com/watch?v=syFZfO_wfMQ"
+    },
+    {
         "title": "Elliot James Reay - I Think They Call This Love (Official Music Video)",
         "query": "https://www.youtube.com/watch?v=e1mOmdykmwI"
     },
@@ -10,5 +14,17 @@
     {
         "title": "Numb (Official Music Video) [4K UPGRADE] \u2013 Linkin Park",
         "query": "https://www.youtube.com/watch?v=kXYiU_JCYtU"
+    },
+    {
+        "title": "Prateek Kuhad - Co2 (Official Audio)",
+        "query": "https://www.youtube.com/watch?v=U2SVCCENLjE"
+    },
+    {
+        "title": "Ruth B. - Dandelions (Lyrics)",
+        "query": "https://www.youtube.com/watch?v=WgTMeICssXY"
+    },
+    {
+        "title": "Tum Mile - Title Track | Emraan Hashmi, Soha Ali | Pritam | Neeraj Shridhar | Kumaar",
+        "query": "https://www.youtube.com/watch?v=odVptmgIcD0"
     }
 ]

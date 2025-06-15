@@ -12,12 +12,17 @@ from PIL import Image, ImageTk
 import io
 import json
 import glob
+from typing import Optional
 
 current_audio_file: str  # tracks the currently playing audio file path
 playlist_file = 'playlist.json'
 playlist = []  # list of {'title': str, 'query': str}
 current_index = 0
 loop_enabled = False
+# flag to control automatic advancing after playback
+auto_advance = False
+# event to signal stopping seek thread
+current_stop_event: Optional[threading.Event] = None
 entry: tk.Entry  # global entry widget
 
 def download_audio(youtube_url, output_path='audio'):
@@ -54,16 +59,23 @@ def gui_music_player():
 
     def play_song(index):
         global current_index, current_audio_file
+        global auto_advance
         if index < 0 or index >= len(playlist):
             return
         current_index = index
+        auto_advance = True  # enable auto next/loop for this playback
         entry_item = playlist[index]
         query = entry_item.get('query') if isinstance(entry_item, dict) else entry_item
         status_var.set('🔄 Downloading...')
         disable_buttons()
 
         def task():
+            global auto_advance, current_stop_event
             try:
+                # prepare stop event for this playback
+                stop_event = threading.Event()
+                current_stop_event = stop_event
+                auto_advance = True
                 # generate a unique filename base per song index
                 base = f"audio_{index}"
                 q = f'ytsearch1:{query}' if not query.startswith('http') else query
@@ -99,15 +111,17 @@ def gui_music_player():
                     update_buttons()
 
                     def update_seek():
-                        while pygame.mixer.music.get_busy():
+                        while not stop_event.is_set() and pygame.mixer.music.get_busy():
                             pos = pygame.mixer.music.get_pos() // 1000
                             seek_var.set(pos)
                             current_time_var.set(format_time(pos))
                             time.sleep(1)
-                        if loop_enabled:
-                            play_song(current_index)
-                        else:
-                            play_next()
+                        # only advance if not manually stopped
+                        if auto_advance:
+                            if loop_enabled:
+                                play_song(current_index)
+                            else:
+                                play_next()
 
                     threading.Thread(target=update_seek, daemon=True).start()
                 else:
@@ -150,16 +164,30 @@ def gui_music_player():
         play_song(len(playlist) - 1)
 
     def pause():
+        global auto_advance
+        auto_advance = False
         pygame.mixer.music.pause()
         status_var.set('⏸️ Paused.')
+        # toggle buttons: resume available
+        pause_btn.config(state='disabled')
+        resume_btn.config(state='normal')
 
     def resume():
+        global auto_advance
+        auto_advance = True
         pygame.mixer.music.unpause()
         status_var.set('▶️ Playing...')
+        # toggle buttons: pause available
+        resume_btn.config(state='disabled')
+        pause_btn.config(state='normal')
 
     def stop():
-        global current_audio_file
+        # signal the seek thread and disable auto-advance
+        global current_stop_event, auto_advance
+        if current_stop_event:
+            current_stop_event.set()
         pygame.mixer.music.stop()
+        auto_advance = False  # prevent automatic next/loop
         status_var.set('⏹️ Stopped.')
         # remove the last downloaded file
         try:
@@ -167,6 +195,8 @@ def gui_music_player():
                 os.remove(current_audio_file)
         except:
             pass
+        # reset buttons
+        disable_buttons()
         enable_play_button()
 
     def seek(val):
@@ -178,12 +208,16 @@ def gui_music_player():
             pygame.mixer.music.set_volume(volume)
 
     def play_next():
-        if current_index + 1 < len(playlist):
-            play_song(current_index + 1)
+        # wrap to next song or first if at end
+        if playlist:
+            next_idx = (current_index + 1) % len(playlist)
+            play_song(next_idx)
 
     def play_previous():
-        if current_index - 1 >= 0:
-            play_song(current_index - 1)
+        # wrap to previous song or last if at start
+        if playlist:
+            prev_idx = (current_index - 1) % len(playlist)
+            play_song(prev_idx)
 
     def toggle_loop():
         global loop_enabled
@@ -197,9 +231,10 @@ def gui_music_player():
         stop_btn.config(state='disabled')
 
     def update_buttons():
+        # after starting playback: allow pause and stop only
         play_btn.config(state='disabled')
         pause_btn.config(state='normal')
-        resume_btn.config(state='normal')
+        resume_btn.config(state='disabled')
         stop_btn.config(state='normal')
 
     def enable_play_button():
