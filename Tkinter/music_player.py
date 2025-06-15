@@ -10,11 +10,14 @@ import requests
 import time
 from PIL import Image, ImageTk
 import io
+import json
 
 AUDIO_FILE = 'audio.mp3'
-playlist = []
+playlist_file = 'playlist.json'
+playlist = []  # list of {'title': str, 'query': str}
 current_index = 0
 loop_enabled = False
+entry: tk.Entry  # global entry widget
 
 def download_audio(youtube_url, output_path='audio'):
     ydl_opts = {
@@ -39,12 +42,21 @@ def format_time(seconds):
     return f"{int(minutes):02}:{int(sec):02}"
 
 def gui_music_player():
+    global playlist, entry
+    playlist_file = 'playlist.json' # Load existing playlist if available
+    try:
+        with open(playlist_file, 'r') as f:
+            playlist = json.load(f)
+    except:
+        playlist = []
+
     def play_song(index):
         global current_index
         if index < 0 or index >= len(playlist):
             return
         current_index = index
-        query = playlist[index]
+        entry_item = playlist[index]
+        query = entry_item.get('query') if isinstance(entry_item, dict) else entry_item
         status_var.set('🔄 Downloading...')
         disable_buttons()
 
@@ -52,18 +64,26 @@ def gui_music_player():
             try:
                 q = f'ytsearch1:{query}' if not query.startswith('http') else query
                 title, thumb_url = download_audio(q, 'audio')
+                # override title with actual YouTube title via oEmbed for direct URLs
+                if query.startswith('http'):
+                    try:
+                        oembed = requests.get('https://www.youtube.com/oembed', params={'url': query, 'format': 'json'}).json()
+                        title = oembed.get('title', title)
+                    except:
+                        pass
+
                 if os.path.exists(AUDIO_FILE):
                     status_var.set(f'▶️ Playing: {title}')
                     pygame.mixer.init()
                     pygame.mixer.music.load(AUDIO_FILE)
-                    pygame.mixer.music.set_volume(volume_slider.get())
+                    pygame.mixer.music.set_volume(0.5)
                     pygame.mixer.music.play()
 
                     try:
                         img_data = requests.get(thumb_url).content
                         img = Image.open(io.BytesIO(img_data)).resize((100, 100))
                         img = ImageTk.PhotoImage(img)
-                        album_label.config(image=img)
+                        album_label.config(image=img)  # type: ignore
                         album_label.image = img
                     except:
                         pass
@@ -91,11 +111,34 @@ def gui_music_player():
         threading.Thread(target=task, daemon=True).start()
 
     def start_download_and_play():
+        global entry
         query = entry.get().strip()
         if not query:
             status_var.set('Please enter a song name or YouTube URL.')
             return
-        playlist.append(query)
+        # search if not a URL to get real title
+        title = query
+        url = query
+        if not query.startswith('http'):
+            status_var.set('🔄 Searching...')
+            try:
+                ydl = yt_dlp.YoutubeDL({'quiet': True})
+                info = ydl.extract_info(f'ytsearch1:{query}', download=False)
+                e = info.get('entries', [None])[0]
+                if e:
+                    title = e.get('title')
+                    url = e.get('webpage_url')
+            except Exception as e:
+                status_var.set(f'❗ Search error: {e}')
+                return
+        # if already in playlist, just play it
+        for idx, item in enumerate(playlist):
+            if item.get('query') == url:
+                play_song(idx)
+                return
+        # add new song and play
+        playlist.append({'title': title, 'query': url})
+        playlist_listbox.insert('end', title)
         play_song(len(playlist) - 1)
 
     def pause():
@@ -151,28 +194,76 @@ def gui_music_player():
     def enable_play_button():
         play_btn.config(state='normal')
 
+    def save_playlist():
+        try:
+            with open(playlist_file, 'w') as f:
+                json.dump(playlist, f, indent=4)  # type: ignore
+            status_var.set('💾 Playlist saved.')
+        except Exception as e:
+            status_var.set(f'❗ Can\'t save: {e}')
+
+    def delete_song():
+        idxs = playlist_listbox.curselection()
+        if not idxs: return
+        for i in reversed(idxs):
+            playlist.pop(i)
+            playlist_listbox.delete(i)
+        status_var.set('🗑️ Song removed.')
+
+    # search and add first YouTube result to playlist
+    def search_songs():
+        global entry
+        q = entry.get().strip()
+        if not q:
+            status_var.set('Enter a query for search.')
+            return
+        status_var.set('🔄 Searching...')
+        try:
+            ydl = yt_dlp.YoutubeDL({'quiet': True})
+            info = ydl.extract_info(f'ytsearch1:{q}', download=False)
+            e = info.get('entries', [None])[0]
+            if e:
+                title = e.get('title')
+                url = e.get('webpage_url')
+                # prevent duplicates
+                if any(item.get('query') == url for item in playlist):
+                    status_var.set('⚠️ Already in playlist.')
+                else:
+                    playlist.insert(0, {'title': title, 'query': url})
+                    playlist_listbox.insert(0, title)
+                    status_var.set(f'✅ Added: {title}')
+            else:
+                status_var.set('❌ No results.')
+        except Exception as e:
+            status_var.set(f'❗ Search error: {e}')
+
     root = tk.Tk()
     root.title('🎶 YouTube Music Player')
     root.geometry('600x600')
+    root.resizable(True, True)
     root.configure(bg='#222831')
 
     style = ttk.Style()
     style.configure("TScale", background="#222831", troughcolor="#393e46", sliderrelief='flat', sliderlength=15)
 
+    # common button style
+    button_args = {
+        'font': ('Arial', 14),
+        'width': 4,
+        'bg': '#00adb5',
+        'fg': 'white',
+        'relief': 'raised',
+        'bd': 2,
+        'activebackground': '#007b80'
+    }
     # --- Top Search and Volume Layout ---
     top_frame = tk.Frame(root, bg='#222831')
     top_frame.pack(pady=(10, 0), fill='x')
-
-    volume_frame = tk.Frame(top_frame, bg='#222831')
-    volume_frame.pack(side='right', padx=15)
-    tk.Label(volume_frame, text='🔊 Volume', bg='#222831', fg='white', font=('Arial', 10)).pack()
-    volume_slider = ttk.Scale(volume_frame, from_=1.0, to=0.0, orient='vertical', length=100, command=change_volume)
-    volume_slider.set(0.5)
-    volume_slider.pack()
-
-    tk.Label(top_frame, text='Enter YouTube URL or song name:', bg='#222831', fg='white', font=('Arial', 12)).pack(side='left', padx=10)
-    entry = tk.Entry(top_frame, width=40, font=('Arial', 12))
-    entry.pack(side='left', padx=5)
+    # Search entry and button
+    entry = tk.Entry(top_frame, font=('Arial', 14), width=40)
+    entry.pack(side='left', padx=(10, 5), expand=True, fill='x')
+    search_btn = tk.Button(top_frame, text='🔍', command=search_songs, **button_args)
+    search_btn.pack(side='left', padx=5)
 
     # --- Album Art ---
     album_label = tk.Label(root, bg='#222831')
@@ -189,11 +280,24 @@ def gui_music_player():
     seek_slider = ttk.Scale(root, from_=0, to=1000, variable=seek_var, orient='horizontal', length=480, command=seek)
     seek_slider.pack(pady=(0, 10))
 
+    # --- Playlist ---
+    tk.Label(root, text='Playlist:', bg='#222831', fg='white', font=('Arial', 12)).pack()
+    playlist_listbox = tk.Listbox(root, width=50, bg='#393e46', fg='white', selectbackground='#00adb5', bd=0, highlightthickness=0)
+    playlist_listbox.pack(pady=(0, 10), fill='both', expand=True)
+    for item in playlist:
+        playlist_listbox.insert('end', item.get('title', item))
+    playlist_listbox.bind('<Double-1>', lambda e: play_song(playlist_listbox.curselection()[0]) if playlist_listbox.curselection() else None)
+    playlist_btn_frame = tk.Frame(root, bg='#222831')
+    playlist_btn_frame.pack(fill='x', pady=(0,10))
+    save_btn = tk.Button(playlist_btn_frame, text='💾', command=save_playlist, **button_args)
+    delete_btn = tk.Button(playlist_btn_frame, text='❌', command=delete_song, **button_args)
+    save_btn.grid(row=0, column=0, padx=5)
+    delete_btn.grid(row=0, column=1, padx=5)
+
     # --- Playback Controls ---
     btn_frame = tk.Frame(root, bg='#222831')
-    btn_frame.pack(pady=10)
+    btn_frame.pack(pady=10, fill='x')
 
-    button_args = {'font': ('Arial', 14), 'width': 4, 'bg': '#00adb5', 'fg': 'white', 'bd': 0, 'activebackground': '#007b80'}
     play_btn = tk.Button(btn_frame, text='▶️', command=start_download_and_play, **button_args)
     pause_btn = tk.Button(btn_frame, text='⏸️', command=pause, state='disabled', **button_args)
     resume_btn = tk.Button(btn_frame, text='⏯️', command=resume, state='disabled', **button_args)
